@@ -719,6 +719,64 @@
 </div>
 
 <script>
+// -----------------------------------------------------------------------
+// Storage fallback: window.storage only exists inside Claude's own preview
+// environment. When this file is hosted elsewhere (Netlify, GitHub Pages,
+// your own server, etc.), that API doesn't exist — so we fall back to the
+// browser's built-in localStorage instead. Everything above this point in
+// the app calls window.storage.get/set/delete/list exactly the same way
+// either way; this shim just makes sure those calls work outside Claude too.
+//
+// Note: "shared" storage (used for master view / tester counts) is scoped
+// per-browser with localStorage, since there's no real server behind it.
+// That means shared data won't actually be visible across different
+// people's devices once self-hosted — only personal data (profile,
+// check-ins, presets, etc.) will reliably persist for each person on
+// their own device/browser.
+// -----------------------------------------------------------------------
+if (!window.storage) {
+  window.storage = {
+    async get(key, shared) {
+      try {
+        const raw = localStorage.getItem((shared ? 'nexa_shared_' : 'nexa_') + key);
+        if (raw === null) return null;
+        return { key, value: raw, shared: !!shared };
+      } catch (e) {
+        return null;
+      }
+    },
+    async set(key, value, shared) {
+      try {
+        localStorage.setItem((shared ? 'nexa_shared_' : 'nexa_') + key, value);
+        return { key, value, shared: !!shared };
+      } catch (e) {
+        return null;
+      }
+    },
+    async delete(key, shared) {
+      try {
+        localStorage.removeItem((shared ? 'nexa_shared_' : 'nexa_') + key);
+        return { key, deleted: true, shared: !!shared };
+      } catch (e) {
+        return null;
+      }
+    },
+    async list(prefix, shared) {
+      try {
+        const p = (shared ? 'nexa_shared_' : 'nexa_') + (prefix || '');
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k.startsWith(p)) keys.push(k.slice((shared ? 'nexa_shared_' : 'nexa_').length));
+        }
+        return { keys, prefix, shared: !!shared };
+      } catch (e) {
+        return null;
+      }
+    }
+  };
+}
+
 const MOODS = [
   { v: 1, e: '😔' }, { v: 2, e: '😕' }, { v: 3, e: '😐' }, { v: 4, e: '🙂' }, { v: 5, e: '😄' }
 ];
@@ -1211,6 +1269,9 @@ function clearAllInputRows() {
 }
 
 async function autoSaveAndShowPopup() {
+  clearTimeout(autoSaveDebounceTimer);
+  autoSaveDebounceTimer = null;
+
   const merged = await buildMergedEntry();
   const settings = await loadSettings();
   if (settings.showSummaryPopup !== false) {
@@ -2367,12 +2428,32 @@ function updateHomeSummary(entry) {
     : '<span class="insight-placeholder">Nothing logged yet today — head to the Log tab to get started.</span>';
 }
 
+let autoSaveDebounceTimer = null;
+
+function scheduleAutoSave(delayMs = 2500) {
+  clearTimeout(autoSaveDebounceTimer);
+  autoSaveDebounceTimer = setTimeout(() => {
+    autoSaveDebounceTimer = null;
+    autoSaveAndShowPopup();
+  }, delayMs);
+}
+
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.closest && t.closest('.drink-row') && !(t.closest('#conditionsList') || t.closest('#medicationsList'))) {
+    scheduleAutoSave();
+  }
+});
+
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.closest && (t.closest('#conditionsList') || t.closest('#medicationsList'))) {
     autoSaveMedical();
   } else if (t.closest && t.closest('.drink-row')) {
-    autoSaveAndShowPopup();
+    // Field lost focus (e.g. tapped the time picker) — still wait briefly
+    // in case they're moving to the next field in the same row, rather
+    // than saving and clearing immediately.
+    scheduleAutoSave();
   }
 });
 
