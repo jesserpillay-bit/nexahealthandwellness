@@ -1,0 +1,8 @@
+name = "red-frost-4f3a"
+compatibility_date = "2024-01-01"
+type = "javascript"
+main = "src/index.js"
+
+[assets]
+binding = "ASSETS"
+directory = "public"
