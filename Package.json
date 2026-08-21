@@ -1,0 +1,7 @@
+{
+  "name": "anthropic-proxy-worker",
+  "version": "1.0.0",
+  "dependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
