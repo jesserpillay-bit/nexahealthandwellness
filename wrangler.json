@@ -1,0 +1,10 @@
+{
+  "name": "orange-pine-933a",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-20",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/v1/*"]
+  }
+}
