@@ -1,6 +1,7 @@
 name = "orange-pine-933a"
-main = "worker.js"
-compatibility_date = "2026-08-20"
+compatibility_date = "2024-01-01"
+type = "javascript"
+main = "src/index.js"
 
 [assets]
 binding = "ASSETS"
