@@ -24,57 +24,62 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
     const corsHeaders = getCorsHeaders(origin);
+    const url = new URL(request.url);
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
-    }
-
-    if (request.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), {
-        status: 405,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    }
-
-    if (!allowedOrigins.includes(origin)) {
-      return new Response(JSON.stringify({ error: "Origin not allowed" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    try {
-      const url = new URL(request.url);
-      const targetUrl = ANTHROPIC_API_URL + url.pathname + url.search;
-
-      const headers = new Headers(request.headers);
-      headers.delete("Origin");
-      headers.set("Origin", ANTHROPIC_API_URL);
-
-      if (env.ANTHROPIC_API_KEY) {
-        headers.set("x-api-key", env.ANTHROPIC_API_KEY);
+    // Only proxy POST requests to /v1/* paths
+    if (url.pathname.startsWith("/v1/")) {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
       }
 
-      const response = await fetch(targetUrl, {
-        method: request.method,
-        headers: headers,
-        body: request.body,
-      });
+      if (request.method !== "POST") {
+        return new Response(JSON.stringify({ error: "Method not allowed" }), {
+          status: 405,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
 
-      const responseHeaders = new Headers(response.headers);
-      Object.entries(corsHeaders).forEach(([key, value]) => {
-        responseHeaders.set(key, value);
-      });
+      if (!allowedOrigins.includes(origin)) {
+        return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
-      return new Response(response.body, {
-        status: response.status,
-        headers: responseHeaders,
-      });
-    } catch (err) {
-      return new Response(JSON.stringify({ error: "Proxy error: " + err.message }), {
-        status: 502,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      try {
+        const targetUrl = ANTHROPIC_API_URL + url.pathname + url.search;
+        const headers = new Headers(request.headers);
+        headers.delete("Origin");
+        headers.set("Origin", ANTHROPIC_API_URL);
+
+        if (env.ANTHROPIC_API_KEY) {
+          headers.set("x-api-key", env.ANTHROPIC_API_KEY);
+        }
+
+        const response = await fetch(targetUrl, {
+          method: request.method,
+          headers: headers,
+          body: request.body,
+        });
+
+        const responseHeaders = new Headers(response.headers);
+        Object.entries(corsHeaders).forEach(([key, value]) => {
+          responseHeaders.set(key, value);
+        });
+
+        return new Response(response.body, {
+          status: response.status,
+          headers: responseHeaders,
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: "Proxy error: " + err.message }), {
+          status: 502,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
     }
+
+    // For all other requests, serve static assets (your website)
+    return env.ASSETS.fetch(request);
   },
 };
