@@ -511,6 +511,7 @@
       <label>Sleep <span class="value" id="sleepTotal">0 hrs</span></label>
       <div id="sleepList"></div>
       <button type="button" class="secondary" id="addSleepBtn" style="margin-top:4px; padding:9px;">+ Add sleep session</button>
+      <button type="button" class="primary" id="saveSleepBtn" style="margin-top:8px; padding:11px;">Save sleep</button>
     </div>
 
     <div class="field">
@@ -555,9 +556,10 @@
       <label>Mood check-ins <span class="value" id="moodAvgVal">—</span></label>
       <div id="moodsList"></div>
       <button type="button" class="secondary" id="addMoodBtn" style="margin-top:4px; padding:9px;">+ Add mood check-in</button>
+      <button type="button" class="primary" id="saveMoodBtn" style="margin-top:8px; padding:11px;">Save mood</button>
     </div>
 
-    <p style="text-align:center; color:var(--text-dim); font-size:12.5px; margin-top:8px;">Everything above saves automatically as you go.</p>
+    <p style="text-align:center; color:var(--text-dim); font-size:12.5px; margin-top:8px;">Tap "Save" under each section once you're happy with it.</p>
   </div>
 
   <div class="panel" id="cycleTrackerPanel" style="display:none;">
@@ -698,8 +700,17 @@
         <button type="button" class="mood-btn setting-toggle-btn active" data-setting="showSummaryPopup" data-value="on" style="font-size:13px;">On</button>
         <button type="button" class="mood-btn setting-toggle-btn" data-setting="showSummaryPopup" data-value="off" style="font-size:13px;">Off</button>
       </div>
-      <p style="font-size:12px; color:var(--text-dim); margin-top:8px;">Saving still happens automatically either way — this only controls whether the confirmation pop-up appears.</p>
+      <p style="font-size:12px; color:var(--text-dim); margin-top:8px;">This only controls whether a confirmation pop-up appears after tapping Save — it doesn't affect saving itself.</p>
     </div>
+  </div>
+
+  <div class="panel">
+    <h2>Error log</h2>
+    <p style="font-size:12.5px; color:var(--text-dim); margin-bottom:12px;">If something isn't working — like the AI insight failing — the details show up here. Useful to check before asking for help.</p>
+    <div id="errorLogList" style="font-size:13px;">
+      <span class="insight-placeholder">No errors logged.</span>
+    </div>
+    <button type="button" class="secondary" id="clearErrorLogBtn" style="margin-top:12px;">Clear log</button>
   </div>
 
   <div class="panel">
@@ -843,13 +854,11 @@ function addMoodRow(time = null, value = null) {
       row.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       recalcMoodAvg();
-      autoSaveAndShowPopup();
     });
   });
   row.querySelector('.remove-drink').addEventListener('click', () => {
     row.remove();
     recalcMoodAvg();
-    autoSaveAndShowPopup();
   });
 }
 
@@ -875,6 +884,7 @@ function recalcMoodAvg() {
 }
 
 document.getElementById('addMoodBtn').addEventListener('click', () => addMoodRow());
+document.getElementById('saveMoodBtn').addEventListener('click', () => autoSaveAndShowPopup());
 addMoodRow();
 
 const sleepList = document.getElementById('sleepList');
@@ -910,7 +920,6 @@ function addSleepRow(label = '', hours = '', time = null) {
   row.querySelector('.remove-drink').addEventListener('click', () => {
     row.remove();
     recalcSleepTotal();
-    autoSaveAndShowPopup();
   });
 }
 
@@ -934,6 +943,7 @@ function getSleepBreakdown() {
 }
 
 document.getElementById('addSleepBtn').addEventListener('click', () => addSleepRow());
+document.getElementById('saveSleepBtn').addEventListener('click', () => autoSaveAndShowPopup());
 addSleepRow('Night sleep', 7.5);
 
 const movementsList = document.getElementById('movementsList');
@@ -967,7 +977,6 @@ function addMovementRow(type = '', minutes = 0, detail = '') {
   row.querySelector('.remove-drink').addEventListener('click', () => {
     row.remove();
     recalcMovementTotal();
-    autoSaveAndShowPopup();
   });
 }
 
@@ -1031,7 +1040,6 @@ function addFoodRow(name = '', calories = 0, time = null, portion = '') {
   row.querySelector('.remove-drink').addEventListener('click', () => {
     row.remove();
     recalcFoodTotal();
-    autoSaveAndShowPopup();
   });
 }
 
@@ -1100,7 +1108,6 @@ function addDrinkRow(type = '', qty = 1, time = null, portion = '', additions = 
   row.querySelector('.remove-drink').addEventListener('click', () => {
     row.remove();
     recalcDrinksTotal();
-    autoSaveAndShowPopup();
   });
 }
 
@@ -1296,9 +1303,6 @@ function clearAllInputRows() {
 }
 
 async function autoSaveAndShowPopup() {
-  clearTimeout(autoSaveDebounceTimer);
-  autoSaveDebounceTimer = null;
-
   const merged = await buildMergedEntry();
   const settings = await loadSettings();
   if (settings.showSummaryPopup !== false) {
@@ -1465,12 +1469,16 @@ async function handleInsight() {
       })
     });
 
-    if (!response.ok) throw new Error('Request failed');
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status} ${response.statusText} — ${bodyText.slice(0, 300)}`);
+    }
     const data = await response.json();
     const text = data.content.map(b => b.text || '').join('').trim();
     card.textContent = text || "Couldn't generate an insight this time — try again in a moment.";
   } catch (e) {
     card.innerHTML = '<span class="insight-error">Something went wrong getting your insight. Try again in a moment.</span>';
+    logError('Get today\'s insight', e);
   } finally {
     btn.disabled = false;
   }
@@ -1585,6 +1593,56 @@ document.getElementById('masterLink').addEventListener('click', openMasterView);
 
 // ---------- Light / dark theme ----------
 // ---------- Settings ----------
+// ---------- Error log ----------
+async function logError(context, error) {
+  try {
+    const result = await window.storage.get('errorLog', false);
+    const log = result ? JSON.parse(result.value) : [];
+    log.push({
+      time: new Date().toISOString(),
+      context,
+      message: (error && error.message) ? error.message : String(error)
+    });
+    // keep only the most recent 40 entries
+    while (log.length > 40) log.shift();
+    await window.storage.set('errorLog', JSON.stringify(log), false);
+  } catch (e) {
+    // if logging itself fails, there's nothing more we can do here
+    console.error('Could not write to error log:', e);
+  }
+  renderErrorLog();
+}
+
+async function renderErrorLog() {
+  const el = document.getElementById('errorLogList');
+  if (!el) return;
+  try {
+    const result = await window.storage.get('errorLog', false);
+    const log = result ? JSON.parse(result.value) : [];
+    if (log.length === 0) {
+      el.innerHTML = '<span class="insight-placeholder">No errors logged.</span>';
+      return;
+    }
+    el.innerHTML = log.slice().reverse().map(entry => {
+      const t = new Date(entry.time);
+      const timeStr = t.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<div style="padding:8px 0; border-bottom:1px solid var(--line);">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim);">${timeStr} — ${entry.context}</div>
+        <div style="font-size:12.5px; color:var(--rose); margin-top:2px;">${entry.message}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<span class="insight-placeholder">Could not load error log.</span>';
+  }
+}
+
+document.getElementById('clearErrorLogBtn').addEventListener('click', async () => {
+  try {
+    await window.storage.set('errorLog', JSON.stringify([]), false);
+  } catch (e) { /* ignore */ }
+  renderErrorLog();
+});
+
 async function loadSettings() {
   try {
     const result = await window.storage.get('settings', false);
@@ -1808,7 +1866,10 @@ async function estimateCalories(items, kind, resultEl, btnEl) {
         messages: [{ role: "user", content: prompt }]
       })
     });
-    if (!response.ok) throw new Error('Request failed');
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status} ${response.statusText} — ${bodyText.slice(0, 300)}`);
+    }
     const data = await response.json();
     const text = data.content.map(b => b.text || '').join('').trim();
     const num = parseInt(text.replace(/[^0-9]/g, ''), 10);
@@ -1818,6 +1879,7 @@ async function estimateCalories(items, kind, resultEl, btnEl) {
   } catch (e) {
     resultEl.textContent = "Couldn't estimate — try again.";
     resultEl.style.color = 'var(--rose)';
+    logError('Estimate calories (' + kind + ')', e);
   } finally {
     btnEl.disabled = false;
   }
@@ -1851,7 +1913,10 @@ async function handleFoodBulkAdd() {
         messages: [{ role: "user", content: prompt }]
       })
     });
-    if (!response.ok) throw new Error('Request failed');
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status} ${response.statusText} — ${bodyText.slice(0, 300)}`);
+    }
     const data = await response.json();
     const raw = data.content.map(b => b.text || '').join('').trim();
     const cleaned = raw.replace(/```json|```/g, '').trim();
@@ -1871,6 +1936,7 @@ async function handleFoodBulkAdd() {
     input.value = '';
   } catch (e) {
     result.textContent = "Couldn't split that — try rephrasing or add items one at a time.";
+    logError('Split & estimate food', e);
     result.style.color = 'var(--rose)';
   } finally {
     btn.disabled = false;
@@ -2207,7 +2273,6 @@ document.addEventListener('click', async (e) => {
       addDrinkRow(preset.name, 1, null, preset.portion || '', preset.additions || '');
       recalcDrinksTotal();
     }
-    autoSaveAndShowPopup();
   }
 });
 
@@ -2455,32 +2520,10 @@ function updateHomeSummary(entry) {
     : '<span class="insight-placeholder">Nothing logged yet today — head to the Log tab to get started.</span>';
 }
 
-let autoSaveDebounceTimer = null;
-
-function scheduleAutoSave(delayMs = 2500) {
-  clearTimeout(autoSaveDebounceTimer);
-  autoSaveDebounceTimer = setTimeout(() => {
-    autoSaveDebounceTimer = null;
-    autoSaveAndShowPopup();
-  }, delayMs);
-}
-
-document.addEventListener('input', (e) => {
-  const t = e.target;
-  if (t.closest && t.closest('.drink-row') && !(t.closest('#conditionsList') || t.closest('#medicationsList'))) {
-    scheduleAutoSave();
-  }
-});
-
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.closest && (t.closest('#conditionsList') || t.closest('#medicationsList'))) {
     autoSaveMedical();
-  } else if (t.closest && t.closest('.drink-row')) {
-    // Field lost focus (e.g. tapped the time picker) — still wait briefly
-    // in case they're moving to the next field in the same row, rather
-    // than saving and clearing immediately.
-    scheduleAutoSave();
   }
 });
 
@@ -2490,6 +2533,7 @@ document.addEventListener('change', (e) => {
 
   const settings = await loadSettings();
   applySettingsToUI(settings);
+  renderErrorLog();
 
   const profile = await loadProfile();
   const entries = await loadEntries();
