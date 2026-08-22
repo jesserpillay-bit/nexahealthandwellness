@@ -1,17 +1,8 @@
 name = "orange-pine-933a"
-main = "src/index.ts"          # ← change to your actual entry file
-compatibility_date = "2026-08-20"
-# compatibility_flags = []     # none currently set
+compatibility_date = "2024-01-01"
+type = "javascript"
+main = "src/index.js"
 
-usage_model = "standard"
-
-[observability]
-enabled = true
-head_sampling_rate = 1
-
-# Custom domain
-routes = [
-  { pattern = "nexahnw.co.za", custom_domain = true }
-]
-
-# workers.dev subdomain is enabled on your account already
+[assets]
+binding = "ASSETS"
+directory = "public"
