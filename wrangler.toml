@@ -1,7 +1,17 @@
 name = "orange-pine-933a"
-main = "worker.js"
+main = "src/index.ts"          # ← change to your actual entry file
 compatibility_date = "2026-08-20"
+# compatibility_flags = []     # none currently set
 
-# Note: Removed legacy [assets] section (run_worker_first) because Wrangler v3
-# does not support it. If you still need the old assets behavior, deploy with
-# wrangler@2 instead: `npm i -g wrangler@2` and then `wrangler publish`.
+usage_model = "standard"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# Custom domain
+routes = [
+  { pattern = "nexahnw.co.za", custom_domain = true }
+]
+
+# workers.dev subdomain is enabled on your account already
