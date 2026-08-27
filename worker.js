@@ -9,7 +9,7 @@
  * this Worker adds the real API key and forwards the request.
  */
 
-export default {
+export default { 
   async fetch(request, env) {
     // Update this to match the real domain(s) your app is served from.
     // Add more origins to the array if needed (e.g. a github.io URL too
