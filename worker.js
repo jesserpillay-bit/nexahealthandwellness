@@ -10,10 +10,7 @@
  */
 
 export default {
-  async fetch(request, env) {
-    // Update this to match the real domain(s) your app is served from.
-    // Add more origins to the array if needed (e.g. a github.io URL too
-    // while testing, alongside your custom domain).
+  async fetch(request, env) {https://github.com/jesserpillay-bit/nexahealthandwellness/blob/main/index.html
     const allowedOrigins = [
       'https://nexahnw.co.za',
       'https://www.nexahnw.co.za',
