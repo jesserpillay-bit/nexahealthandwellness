@@ -944,7 +944,6 @@ function getSleepBreakdown() {
 
 document.getElementById('addSleepBtn').addEventListener('click', () => addSleepRow());
 document.getElementById('saveSleepBtn').addEventListener('click', () => autoSaveAndShowPopup());
-addSleepRow('Night sleep', 7.5);
 
 const movementsList = document.getElementById('movementsList');
 const movementTotal = document.getElementById('movementTotal');
@@ -1001,7 +1000,6 @@ function getMovementBreakdown() {
 
 document.getElementById('addMovementBtn').addEventListener('click', () => addMovementRow());
 document.getElementById('saveMovementBtn').addEventListener('click', () => autoSaveAndShowPopup());
-addMovementRow('Walking', 0);
 
 const foodList = document.getElementById('foodList');
 const foodTotal = document.getElementById('foodTotal');
@@ -1065,7 +1063,6 @@ function getFoodBreakdown() {
 
 document.getElementById('addFoodBtn').addEventListener('click', () => addFoodRow());
 document.getElementById('saveFoodBtn').addEventListener('click', () => autoSaveAndShowPopup());
-addFoodRow('', 0);
 
 const drinksList = document.getElementById('drinksList');
 const drinksTotal = document.getElementById('drinksTotal');
@@ -1134,7 +1131,6 @@ function getDrinksBreakdown() {
 
 document.getElementById('addDrinkBtn').addEventListener('click', () => addDrinkRow());
 document.getElementById('saveDrinkBtn').addEventListener('click', () => autoSaveAndShowPopup());
-addDrinkRow('Coffee', 0);
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -1206,7 +1202,7 @@ function buildSummaryHTML(entry) {
     <p style="margin:0 0 10px;"><strong>Sleep</strong><br><span style="color:var(--text-dim);">${sleepLine} — ${entry.sleepHours} hrs total</span></p>
     <p style="margin:0 0 10px;"><strong>Movement</strong><br><span style="color:var(--text-dim);">${moveLine} — ${entry.movementMinutes} min total</span></p>
     <p style="margin:0 0 10px;"><strong>Drinks</strong><br><span style="color:var(--text-dim);">${drinkLine} — ${entry.drinksCount} total</span></p>
-    <p style="margin:0 0 10px;"><strong>Food</strong><br><span style="color:var(--text-dim);">${foodLine} — ${entry.calorieTotal} cal total</span></p>
+    <p style="margin:0 0 10px;"><strong>Food</strong><br><span style="color:var(--text-dim);">${foodLine}</span><br><strong style="color:var(--dawn);">${entry.calorieTotal} cal total</strong></p>
     <p style="margin:0;"><strong>Mood</strong><br><span style="color:var(--text-dim);">${moodLine} — avg ${entry.mood}/5</span></p>
   `;
 }
@@ -1304,16 +1300,19 @@ function clearAllInputRows() {
 
 async function autoSaveAndShowPopup() {
   const merged = await buildMergedEntry();
+  const hasAnything = merged.moods.length || merged.movements.length || merged.drinks.length ||
+    merged.food.length || merged.sleepSessions.length;
+
   const settings = await loadSettings();
   if (settings.showSummaryPopup !== false) {
     showSummaryPopup(merged);
   }
   updateHomeSummary(merged);
 
-  if (merged.moods.length === 0) {
+  if (!hasAnything) {
     const status = document.getElementById('summarySaveStatus');
     if (status) {
-      status.innerHTML = 'Add a mood check-in to start saving today.';
+      status.innerHTML = 'Nothing to save yet.';
       status.style.color = 'var(--text-dim)';
     }
     return;
@@ -1930,6 +1929,7 @@ async function handleFoodBulkAdd() {
       }
     });
     recalcFoodTotal();
+    scheduleFoodEstimate();
 
     result.textContent = `Added ${items.length} item${items.length === 1 ? '' : 's'}.`;
     result.style.color = 'var(--sage)';
@@ -1956,6 +1956,34 @@ document.getElementById('drinkEstimateBtn').addEventListener('click', () => {
   const result = document.getElementById('drinkEstimateResult');
   estimateCalories(getDrinksBreakdown(), 'drinks', result, btn);
 });
+
+// Automatic background estimation — runs on its own shortly after you stop
+// typing, so you don't have to tap the button for a calorie number to show.
+let foodEstimateTimer = null;
+let drinkEstimateTimer = null;
+
+function scheduleFoodEstimate() {
+  clearTimeout(foodEstimateTimer);
+  foodEstimateTimer = setTimeout(() => {
+    const btn = document.getElementById('foodEstimateBtn');
+    const result = document.getElementById('foodEstimateResult');
+    const items = getFoodBreakdown();
+    if (items.length > 0) estimateCalories(items, 'food', result, btn);
+  }, 1800);
+}
+
+function scheduleDrinkEstimate() {
+  clearTimeout(drinkEstimateTimer);
+  drinkEstimateTimer = setTimeout(() => {
+    const btn = document.getElementById('drinkEstimateBtn');
+    const result = document.getElementById('drinkEstimateResult');
+    const items = getDrinksBreakdown();
+    if (items.length > 0) estimateCalories(items, 'drinks', result, btn);
+  }, 1800);
+}
+
+document.getElementById('foodList').addEventListener('input', scheduleFoodEstimate);
+document.getElementById('drinksList').addEventListener('input', scheduleDrinkEstimate);
 
 const conditionsList = document.getElementById('conditionsList');
 let conditionRowId = 0;
