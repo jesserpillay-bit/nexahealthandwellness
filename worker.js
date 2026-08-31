@@ -7,13 +7,15 @@
  *
  * The app calls this Worker's URL instead of api.anthropic.com directly;
  * this Worker adds the real API key and forwards the request.
+ *
+ * Rate limiting: since this Worker has no login/accounts, requests are
+ * limited per IP address to stop someone hammering it directly (bypassing
+ * the app entirely) and running up your Anthropic bill. 20 requests/minute
+ * is generous for one real person using the app, but blocks abuse.
  */
 
-export default { 
+export default {
   async fetch(request, env) {
-    // Update this to match the real domain(s) your app is served from.
-    // Add more origins to the array if needed (e.g. a github.io URL too
-    // while testing, alongside your custom domain).
     const allowedOrigins = [
       'https://nexahnw.co.za',
       'https://www.nexahnw.co.za',
@@ -28,13 +30,23 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
-    // Preflight request
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
 
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    }
+
+    // Rate limit by IP — protects your API budget from direct abuse of this
+    // Worker's URL, since there's no login system to key off of instead.
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const { success } = await env.AI_RATE_LIMITER.limit({ key: ip });
+    if (!success) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please wait a moment and try again.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (!env.ANTHROPIC_API_KEY) {
