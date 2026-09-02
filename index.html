@@ -454,6 +454,8 @@
     <button class="tab-btn" data-tab="log">Log</button>
     <button class="tab-btn" data-tab="history">History</button>
     <button class="tab-btn" data-tab="presets">Presets</button>
+    <button class="tab-btn" data-tab="badges">Badges</button>
+    <button class="tab-btn" data-tab="compete">Compete</button>
     <button class="tab-btn" data-tab="medical">Medical</button>
     <button class="tab-btn" data-tab="more">More</button>
   </div>
@@ -669,6 +671,57 @@
       <span class="insight-placeholder">No presets yet — create one above.</span>
     </div>
   </div>
+  </div>
+
+  <div class="tab-panel" data-tab="badges" style="display:none;">
+  <div class="panel">
+    <h2>Your badges</h2>
+    <p style="font-size:12.5px; color:var(--text-dim); margin-bottom:14px;">Earned from your own logged history — keep checking in to unlock more.</p>
+    <div id="badgesList" style="display:flex; flex-direction:column; gap:10px;"></div>
+  </div>
+  </div>
+
+  <div class="tab-panel" data-tab="compete" style="display:none;">
+  <div class="panel">
+    <h2>Create a group</h2>
+    <div class="field">
+      <label>Group name</label>
+      <input type="text" id="groupCreateName" placeholder="e.g. Office Wellness Crew">
+    </div>
+    <div class="field">
+      <label>Your display name</label>
+      <input type="text" id="groupCreateMemberName" placeholder="e.g. Jesse">
+    </div>
+    <div class="field">
+      <label>What are you competing on?</label>
+      <div class="mood-row" style="flex-wrap:wrap;">
+        <button type="button" class="mood-btn task-type-btn active" data-value="checkins" style="font-size:12px;">Days logged</button>
+        <button type="button" class="mood-btn task-type-btn" data-value="movementMinutes" style="font-size:12px;">Movement</button>
+        <button type="button" class="mood-btn task-type-btn" data-value="moodAvg" style="font-size:12px;">Mood avg</button>
+        <button type="button" class="mood-btn task-type-btn" data-value="streak" style="font-size:12px;">Streak</button>
+      </div>
+      <input type="hidden" id="groupCreateTask" value="checkins">
+      <p style="font-size:12px; color:var(--text-dim); margin-top:8px;">All based on the last 7 days.</p>
+    </div>
+    <button class="primary" id="groupCreateBtn">Create group</button>
+    <div id="groupCreateResult" style="margin-top:12px; font-size:13.5px;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Join a group</h2>
+    <div class="field">
+      <label>Group code</label>
+      <input type="text" id="groupJoinCode" placeholder="e.g. 7F3K2Q" style="text-transform:uppercase;">
+    </div>
+    <div class="field">
+      <label>Your display name</label>
+      <input type="text" id="groupJoinMemberName" placeholder="e.g. Jesse">
+    </div>
+    <button class="secondary" id="groupJoinBtn">Join group</button>
+    <div id="groupJoinResult" style="margin-top:12px; font-size:13.5px;"></div>
+  </div>
+
+  <div id="myGroupsSection"></div>
   </div>
 
   <div class="tab-panel" data-tab="medical" style="display:none;">
@@ -2182,6 +2235,303 @@ document.getElementById('presetSuggestionDismissBtn').addEventListener('click', 
   panel.style.display = 'none';
 });
 
+// ---------- Badges ----------
+function computeLongestStreak(entries) {
+  if (entries.length === 0) return 0;
+  const dates = entries.map(e => e.date).sort();
+  let longest = 1, current = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const prev = new Date(dates[i - 1] + 'T00:00:00');
+    const cur = new Date(dates[i] + 'T00:00:00');
+    const diffDays = Math.round((cur - prev) / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) {
+      current++;
+      longest = Math.max(longest, current);
+    } else if (diffDays > 1) {
+      current = 1;
+    }
+  }
+  return longest;
+}
+
+function computeBadges(entries, presets) {
+  const totalDrinks = entries.reduce((s, e) => s + (e.drinksCount || 0), 0);
+  const totalMovementMin = entries.reduce((s, e) => s + (e.movementMinutes || 0), 0);
+  const totalMoodCheckins = entries.reduce((s, e) => s + ((e.moods && e.moods.length) || 0), 0);
+  const sleepDays = entries.filter(e => e.sleepSessions && e.sleepSessions.length > 0).length;
+  const wellRoundedDays = entries.filter(e =>
+    (e.sleepSessions && e.sleepSessions.length) &&
+    (e.movements && e.movements.length) &&
+    (e.drinks && e.drinks.length) &&
+    (e.food && e.food.length) &&
+    (e.moods && e.moods.length)
+  ).length;
+  const presetCount = (presets.food ? presets.food.length : 0) + (presets.drinks ? presets.drinks.length : 0);
+  const longestStreak = computeLongestStreak(entries);
+
+  return [
+    { id: 'first', icon: '🌱', name: 'First check-in', desc: 'Log your first day', earned: entries.length >= 1, progress: Math.min(entries.length, 1), target: 1 },
+    { id: 'streak3', icon: '🔥', name: '3-day streak', desc: 'Log 3 days in a row', earned: longestStreak >= 3, progress: Math.min(longestStreak, 3), target: 3 },
+    { id: 'streak7', icon: '🔥', name: '7-day streak', desc: 'Log 7 days in a row', earned: longestStreak >= 7, progress: Math.min(longestStreak, 7), target: 7 },
+    { id: 'streak30', icon: '🏆', name: '30-day streak', desc: 'Log 30 days in a row', earned: longestStreak >= 30, progress: Math.min(longestStreak, 30), target: 30 },
+    { id: 'hydration', icon: '💧', name: 'Hydration hero', desc: 'Log 20 drinks total', earned: totalDrinks >= 20, progress: Math.min(totalDrinks, 20), target: 20 },
+    { id: 'movement', icon: '🏃', name: 'On the move', desc: 'Log 300 minutes of movement total', earned: totalMovementMin >= 300, progress: Math.min(totalMovementMin, 300), target: 300 },
+    { id: 'mood', icon: '🙂', name: 'Mood aware', desc: 'Log 20 mood check-ins total', earned: totalMoodCheckins >= 20, progress: Math.min(totalMoodCheckins, 20), target: 20 },
+    { id: 'sleep', icon: '😴', name: 'Well rested', desc: 'Log sleep on 10 different days', earned: sleepDays >= 10, progress: Math.min(sleepDays, 10), target: 10 },
+    { id: 'roundedday', icon: '⭐', name: 'Well rounded', desc: 'Log every section in a single day', earned: wellRoundedDays >= 1, progress: Math.min(wellRoundedDays, 1), target: 1 },
+    { id: 'presets', icon: '⚡', name: 'Preset pro', desc: 'Create 5 presets', earned: presetCount >= 5, progress: Math.min(presetCount, 5), target: 5 },
+  ];
+}
+
+function badgeCardHTML(b) {
+  const opacity = b.earned ? '1' : '0.45';
+  const barPct = Math.round((b.progress / b.target) * 100);
+  return `
+    <div style="display:flex; align-items:center; gap:14px; padding:12px; background:var(--panel-raised); border-radius:12px; opacity:${opacity};">
+      <div style="font-size:28px;">${b.icon}</div>
+      <div style="flex:1;">
+        <div style="font-weight:600; color:var(--text);">${b.name}${b.earned ? ' ✓' : ''}</div>
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">${b.desc}</div>
+        <div style="height:5px; background:var(--panel); border-radius:3px; overflow:hidden;">
+          <div style="height:100%; width:${barPct}%; background:var(--dawn);"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------- Compete (groups) ----------
+const TASK_LABELS = {
+  checkins: 'Days logged (7d)',
+  movementMinutes: 'Movement minutes (7d)',
+  moodAvg: 'Average mood (7d)',
+  streak: 'Current streak (days)'
+};
+
+function last7Entries(entries) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 6);
+  const cutoffKey = cutoff.toISOString().slice(0, 10);
+  return entries.filter(e => e.date >= cutoffKey);
+}
+
+function computeTaskValue(entries, taskType) {
+  const recent = last7Entries(entries);
+  if (taskType === 'checkins') return recent.length;
+  if (taskType === 'movementMinutes') return recent.reduce((s, e) => s + (e.movementMinutes || 0), 0);
+  if (taskType === 'moodAvg') {
+    const withMood = recent.filter(e => e.mood > 0);
+    if (withMood.length === 0) return 0;
+    return Math.round((withMood.reduce((s, e) => s + e.mood, 0) / withMood.length) * 10) / 10;
+  }
+  if (taskType === 'streak') {
+    // current streak ending today or yesterday
+    const dates = new Set(entries.map(e => e.date));
+    let streak = 0;
+    let d = new Date();
+    while (true) {
+      const key = d.toISOString().slice(0, 10);
+      if (dates.has(key)) { streak++; d.setDate(d.getDate() - 1); }
+      else break;
+    }
+    return streak;
+  }
+  return 0;
+}
+
+function groupsApiUrl(path) {
+  const base = getAIEndpoint();
+  if (base === 'https://api.anthropic.com/v1/messages') return null; // no proxy configured yet
+  const origin = base.replace(/\/$/, '');
+  return origin + path;
+}
+
+async function loadMyGroups() {
+  try {
+    const result = await window.storage.get('myGroups', false);
+    return result ? JSON.parse(result.value) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function saveMyGroups(groups) {
+  try {
+    await window.storage.set('myGroups', JSON.stringify(groups), false);
+  } catch (e) { /* ignore */ }
+}
+
+document.querySelectorAll('.task-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('groupCreateTask').value = btn.dataset.value;
+    document.querySelectorAll('.task-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+document.getElementById('groupCreateBtn').addEventListener('click', async () => {
+  const name = document.getElementById('groupCreateName').value.trim();
+  const memberName = document.getElementById('groupCreateMemberName').value.trim();
+  const task = document.getElementById('groupCreateTask').value;
+  const resultEl = document.getElementById('groupCreateResult');
+
+  if (!name || !memberName) {
+    resultEl.innerHTML = '<span class="insight-error">Enter a group name and your display name.</span>';
+    return;
+  }
+  const url = groupsApiUrl('/groups/create');
+  if (!url) {
+    resultEl.innerHTML = '<span class="insight-error">Groups need the AI proxy Worker configured first — see the Worker setup notes.</span>';
+    return;
+  }
+
+  resultEl.textContent = 'Creating…';
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, task, memberName })
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+
+    const groups = await loadMyGroups();
+    groups.push({ code: data.code, name, task, memberId: data.memberId, memberName });
+    await saveMyGroups(groups);
+
+    resultEl.innerHTML = `<span style="color:var(--sage);">Created! Share this code: <strong style="font-family:'IBM Plex Mono',monospace; font-size:16px;">${data.code}</strong></span>`;
+    document.getElementById('groupCreateName').value = '';
+    document.getElementById('groupCreateMemberName').value = '';
+    renderMyGroups();
+  } catch (e) {
+    resultEl.innerHTML = '<span class="insight-error">Could not create group — try again.</span>';
+    logError('Create group', e);
+  }
+});
+
+document.getElementById('groupJoinBtn').addEventListener('click', async () => {
+  const code = document.getElementById('groupJoinCode').value.trim().toUpperCase();
+  const memberName = document.getElementById('groupJoinMemberName').value.trim();
+  const resultEl = document.getElementById('groupJoinResult');
+
+  if (!code || !memberName) {
+    resultEl.innerHTML = '<span class="insight-error">Enter a group code and your display name.</span>';
+    return;
+  }
+  const url = groupsApiUrl('/groups/join');
+  if (!url) {
+    resultEl.innerHTML = '<span class="insight-error">Groups need the AI proxy Worker configured first.</span>';
+    return;
+  }
+
+  resultEl.textContent = 'Joining…';
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, memberName })
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+
+    const groups = await loadMyGroups();
+    groups.push({ code, name: data.name, task: data.task, memberId: data.memberId, memberName });
+    await saveMyGroups(groups);
+
+    resultEl.innerHTML = `<span style="color:var(--sage);">Joined "${data.name}"!</span>`;
+    document.getElementById('groupJoinCode').value = '';
+    document.getElementById('groupJoinMemberName').value = '';
+    renderMyGroups();
+  } catch (e) {
+    resultEl.innerHTML = '<span class="insight-error">Could not join — check the code and try again.</span>';
+    logError('Join group', e);
+  }
+});
+
+async function syncGroupProgress(group) {
+  const url = groupsApiUrl('/groups/submit');
+  if (!url) return null;
+  const entries = await loadEntries();
+  const value = computeTaskValue(entries, group.task);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: group.code, memberId: group.memberId, value })
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return await response.json();
+  } catch (e) {
+    logError('Sync group progress', e);
+    return null;
+  }
+}
+
+function leaderboardHTML(group, data) {
+  const members = (data && data.members) ? [...data.members].sort((a, b) => b.value - a.value) : [];
+  const rows = members.map((m, i) => `
+    <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line);">
+      <span>${i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}${m.name}${m.id === group.memberId ? ' (you)' : ''}</span>
+      <strong>${m.value}</strong>
+    </div>
+  `).join('');
+  return `
+    <div class="panel">
+      <h2>${group.name}</h2>
+      <p style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">${TASK_LABELS[group.task] || group.task} — code: <span style="font-family:'IBM Plex Mono',monospace;">${group.code}</span></p>
+      <div>${rows || '<span class="insight-placeholder">No scores yet.</span>'}</div>
+      <button type="button" class="secondary sync-group-btn" data-code="${group.code}" style="margin-top:12px;">Sync my progress</button>
+    </div>
+  `;
+}
+
+async function renderMyGroups() {
+  const el = document.getElementById('myGroupsSection');
+  if (!el) return;
+  const groups = await loadMyGroups();
+  if (groups.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+  const url = groupsApiUrl('/groups/get');
+  let html = '';
+  for (const group of groups) {
+    let data = null;
+    if (url) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: group.code })
+        });
+        if (response.ok) data = await response.json();
+      } catch (e) { /* show empty leaderboard below */ }
+    }
+    html += leaderboardHTML(group, data);
+  }
+  el.innerHTML = html;
+
+  document.querySelectorAll('.sync-group-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Syncing…';
+      const groups = await loadMyGroups();
+      const group = groups.find(g => g.code === btn.dataset.code);
+      if (group) await syncGroupProgress(group);
+      await renderMyGroups();
+    });
+  });
+}
+
+async function renderBadges() {
+  const el = document.getElementById('badgesList');
+  if (!el) return;
+  const entries = await loadEntries();
+  const presets = await loadPresets();
+  const badges = computeBadges(entries, presets);
+  el.innerHTML = badges.map(badgeCardHTML).join('');
+}
+
 async function loadPresets() {
   try {
     const result = await window.storage.get('presets', false);
@@ -2532,6 +2882,10 @@ async function switchTab(tab) {
   if (tab === 'home') {
     updateHomeSummary(await buildMergedEntry());
     checkPresetSuggestions();
+  } else if (tab === 'badges') {
+    renderBadges();
+  } else if (tab === 'compete') {
+    renderMyGroups();
   }
 }
 
