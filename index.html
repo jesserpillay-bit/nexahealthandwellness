@@ -2269,6 +2269,13 @@ function computeBadges(entries, presets) {
   const presetCount = (presets.food ? presets.food.length : 0) + (presets.drinks ? presets.drinks.length : 0);
   const longestStreak = computeLongestStreak(entries);
 
+  // Daily goal badges — each counts how many separate days hit a healthy
+  // per-day threshold, based only on what the user actually logged.
+  const activeDays = entries.filter(e => (e.movementMinutes || 0) >= 30).length;
+  const wellSleptDays = entries.filter(e => (e.sleepHours || 0) >= 7).length;
+  const goodMoodDays = entries.filter(e => (e.mood || 0) >= 4).length;
+  const hydratedDays = entries.filter(e => (e.drinksCount || 0) >= 4).length;
+
   return [
     { id: 'first', icon: '🌱', name: 'First check-in', desc: 'Log your first day', earned: entries.length >= 1, progress: Math.min(entries.length, 1), target: 1 },
     { id: 'streak3', icon: '🔥', name: '3-day streak', desc: 'Log 3 days in a row', earned: longestStreak >= 3, progress: Math.min(longestStreak, 3), target: 3 },
@@ -2280,6 +2287,10 @@ function computeBadges(entries, presets) {
     { id: 'sleep', icon: '😴', name: 'Well rested', desc: 'Log sleep on 10 different days', earned: sleepDays >= 10, progress: Math.min(sleepDays, 10), target: 10 },
     { id: 'roundedday', icon: '⭐', name: 'Well rounded', desc: 'Log every section in a single day', earned: wellRoundedDays >= 1, progress: Math.min(wellRoundedDays, 1), target: 1 },
     { id: 'presets', icon: '⚡', name: 'Preset pro', desc: 'Create 5 presets', earned: presetCount >= 5, progress: Math.min(presetCount, 5), target: 5 },
+    { id: 'goal-active', icon: '🎯', name: 'Active day goal', desc: '30+ minutes of movement in a day — hit it 5 times', earned: activeDays >= 5, progress: Math.min(activeDays, 5), target: 5 },
+    { id: 'goal-sleep', icon: '🎯', name: 'Sleep goal', desc: '7+ hours of sleep in a day — hit it 5 times', earned: wellSleptDays >= 5, progress: Math.min(wellSleptDays, 5), target: 5 },
+    { id: 'goal-mood', icon: '🎯', name: 'Good mood goal', desc: 'Average mood of 4+ in a day — hit it 5 times', earned: goodMoodDays >= 5, progress: Math.min(goodMoodDays, 5), target: 5 },
+    { id: 'goal-hydration', icon: '🎯', name: 'Hydration goal', desc: '4+ drinks logged in a day — hit it 5 times', earned: hydratedDays >= 5, progress: Math.min(hydratedDays, 5), target: 5 },
   ];
 }
 
@@ -2529,7 +2540,15 @@ async function renderBadges() {
   const entries = await loadEntries();
   const presets = await loadPresets();
   const badges = computeBadges(entries, presets);
-  el.innerHTML = badges.map(badgeCardHTML).join('');
+  const dailyGoals = badges.filter(b => b.id.startsWith('goal-'));
+  const milestones = badges.filter(b => !b.id.startsWith('goal-'));
+
+  el.innerHTML = `
+    <h3 style="font-size:13px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; margin:0 0 4px;">Daily goals</h3>
+    ${dailyGoals.map(badgeCardHTML).join('')}
+    <h3 style="font-size:13px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; margin:16px 0 4px;">Milestones</h3>
+    ${milestones.map(badgeCardHTML).join('')}
+  `;
 }
 
 async function loadPresets() {
